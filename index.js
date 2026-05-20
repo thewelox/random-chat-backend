@@ -29,13 +29,14 @@ io.on("connection", (socket) => {
     matchUsers();
   });
 
-  socket.on("message", (data) => {
-    io.to(socket.roomId).emit("message", {
-      text: data.text,
-      nickname: socket.nickname,
-      sender: socket.id,
-    });
+ socket.on("message", (data) => {
+  io.to(socket.roomId).emit("message", {
+    text: data.text,
+    nickname: socket.nickname,
+    sender: socket.id,
+    replyTo: data.replyTo || null,
   });
+});
 
   socket.on("typing", () => {
     socket.to(socket.roomId).emit("typing");
