@@ -42,10 +42,10 @@ io.on("connection", (socket) => {
 
   socket.on("join", (data) => {
     socket.nickname =
-      data.nickname;
+      data.nickname || "Anonymous";
 
     socket.gender =
-      data.gender;
+      data.gender || "male";
 
     const alreadyWaiting =
       waitingUsers.find(
@@ -63,24 +63,28 @@ io.on("connection", (socket) => {
   socket.on("message", (data) => {
     if (!socket.roomId) return;
 
+    const messageData = {
+      id: Date.now(),
+
+      timestamp: new Date(),
+
+      text: data.text,
+
+      nickname:
+        socket.nickname,
+
+      gender:
+        socket.gender,
+
+      sender: socket.id,
+
+      replyTo:
+        data.replyTo || null,
+    };
+
     io.to(socket.roomId).emit(
       "message",
-      {
-        id: Date.now(),
-
-        text: data.text,
-
-        nickname:
-          socket.nickname,
-
-        gender:
-          socket.gender,
-
-        sender: socket.id,
-
-        replyTo:
-          data.replyTo || null,
-      }
+      messageData
     );
   });
 
@@ -148,7 +152,13 @@ function matchUsers() {
     if (!user1 || !user2)
       return;
 
-    const roomId = `room-${user1.id}-${user2.id}`;
+    if (
+      user1.id === user2.id
+    ) {
+      continue;
+    }
+
+    const roomId = `room-${user1.id}-${user2.id}-${Date.now()}`;
 
     user1.join(roomId);
 
@@ -169,19 +179,17 @@ function matchUsers() {
 }
 
 function leaveRoom(socket) {
-  if (socket.roomId) {
-    socket
-      .to(socket.roomId)
-      .emit(
-        "stranger_left"
-      );
+  if (!socket.roomId) return;
 
-    socket.leave(
-      socket.roomId
+  socket
+    .to(socket.roomId)
+    .emit(
+      "stranger_left"
     );
 
-    socket.roomId = null;
-  }
+  socket.leave(socket.roomId);
+
+  socket.roomId = null;
 }
 
 const PORT =
