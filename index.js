@@ -11,7 +11,7 @@ const app = express();
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("VEIL backend running");
+  res.send("VIBE backend running");
 });
 
 const server = http.createServer(app);
@@ -25,17 +25,32 @@ const io = new Server(server, {
 
 let waitingUsers = [];
 
+let onlineUsers = 0;
+
 io.on("connection", (socket) => {
-  console.log("Connected:", socket.id);
+  console.log(
+    "Connected:",
+    socket.id
+  );
+
+  onlineUsers++;
+
+  io.emit(
+    "online_count",
+    onlineUsers
+  );
 
   socket.on("join", (data) => {
-    socket.nickname = data.nickname;
+    socket.nickname =
+      data.nickname;
 
-    socket.gender = data.gender;
+    socket.gender =
+      data.gender;
 
     const alreadyWaiting =
       waitingUsers.find(
-        (user) => user.id === socket.id
+        (user) =>
+          user.id === socket.id
       );
 
     if (!alreadyWaiting) {
@@ -55,9 +70,11 @@ io.on("connection", (socket) => {
 
         text: data.text,
 
-        nickname: socket.nickname,
+        nickname:
+          socket.nickname,
 
-        gender: socket.gender,
+        gender:
+          socket.gender,
 
         sender: socket.id,
 
@@ -80,7 +97,8 @@ io.on("connection", (socket) => {
 
     const alreadyWaiting =
       waitingUsers.find(
-        (user) => user.id === socket.id
+        (user) =>
+          user.id === socket.id
       );
 
     if (!alreadyWaiting) {
@@ -99,6 +117,17 @@ io.on("connection", (socket) => {
           user.id !== socket.id
       );
 
+    onlineUsers--;
+
+    if (onlineUsers < 0) {
+      onlineUsers = 0;
+    }
+
+    io.emit(
+      "online_count",
+      onlineUsers
+    );
+
     console.log(
       "Disconnected:",
       socket.id
@@ -107,14 +136,17 @@ io.on("connection", (socket) => {
 });
 
 function matchUsers() {
-  while (waitingUsers.length >= 2) {
+  while (
+    waitingUsers.length >= 2
+  ) {
     const user1 =
       waitingUsers.shift();
 
     const user2 =
       waitingUsers.shift();
 
-    if (!user1 || !user2) return;
+    if (!user1 || !user2)
+      return;
 
     const roomId = `room-${user1.id}-${user2.id}`;
 
@@ -140,9 +172,13 @@ function leaveRoom(socket) {
   if (socket.roomId) {
     socket
       .to(socket.roomId)
-      .emit("stranger_left");
+      .emit(
+        "stranger_left"
+      );
 
-    socket.leave(socket.roomId);
+    socket.leave(
+      socket.roomId
+    );
 
     socket.roomId = null;
   }
