@@ -11,7 +11,7 @@ const app = express();
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send("VIBE backend running");
+  res.send("VIBE backend running 🌌");
 });
 
 const server = http.createServer(app);
@@ -23,9 +23,25 @@ const io = new Server(server, {
   },
 });
 
+/*
+  RANDOM CHAT
+*/
+
 let waitingUsers = [];
 
 let onlineUsers = 0;
+
+/*
+  CLUB SYSTEM
+*/
+
+let clubUsers = [];
+
+let clubMessages = [];
+
+/*
+  SOCKET CONNECTION
+*/
 
 io.on("connection", (socket) => {
   console.log(
@@ -33,12 +49,26 @@ io.on("connection", (socket) => {
     socket.id
   );
 
+  /*
+    USER ONLINE
+  */
+
   onlineUsers++;
 
   io.emit(
     "online_count",
     onlineUsers
   );
+
+  /*
+    ANTISPAM
+  */
+
+  socket.lastMessageTime = 0;
+
+  /*
+    RANDOM CHAT JOIN
+  */
 
   socket.on("join", (data) => {
     socket.nickname =
@@ -60,13 +90,32 @@ io.on("connection", (socket) => {
     matchUsers();
   });
 
+  /*
+    RANDOM MESSAGE
+  */
+
   socket.on("message", (data) => {
     if (!socket.roomId) return;
+
+    const now = Date.now();
+
+    /*
+      ANTISPAM
+    */
+
+    if (
+      now - socket.lastMessageTime <
+      700
+    ) {
+      return;
+    }
+
+    socket.lastMessageTime = now;
 
     const messageData = {
       id: Date.now(),
 
-      timestamp: new Date(),
+      timestamp: Date.now(),
 
       text: data.text,
 
@@ -78,6 +127,8 @@ io.on("connection", (socket) => {
 
       sender: socket.id,
 
+      reaction: null,
+
       replyTo:
         data.replyTo || null,
     };
@@ -88,6 +139,27 @@ io.on("connection", (socket) => {
     );
   });
 
+  /*
+    MESSAGE REACTIONS
+  */
+
+  socket.on(
+    "react_message",
+    ({ messageId, emoji }) => {
+      io.emit(
+        "message_reaction",
+        {
+          messageId,
+          emoji,
+        }
+      );
+    }
+  );
+
+  /*
+    RANDOM TYPING
+  */
+
   socket.on("typing", () => {
     if (!socket.roomId) return;
 
@@ -95,6 +167,10 @@ io.on("connection", (socket) => {
       .to(socket.roomId)
       .emit("typing");
   });
+
+  /*
+    NEXT USER
+  */
 
   socket.on("next", () => {
     leaveRoom(socket);
@@ -112,14 +188,267 @@ io.on("connection", (socket) => {
     matchUsers();
   });
 
+  /*
+    CLUB JOIN
+  */
+
+  socket.on(
+    "join_club",
+    (profile) => {
+      socket.clubProfile = {
+        nickname:
+          profile.nickname ||
+          "Anonymous",
+
+        bio:
+          profile.bio ||
+          "VIBE member 🌌",
+
+        avatar:
+          profile.avatar ||
+          "/male.jpg",
+      };
+
+      const alreadyExists =
+        clubUsers.find(
+          (user) =>
+            user.id === socket.id
+        );
+
+      if (!alreadyExists) {
+        clubUsers.push({
+          id: socket.id,
+
+          nickname:
+            socket.clubProfile
+              .nickname,
+
+          bio:
+            socket.clubProfile
+              .bio,
+
+          avatar:
+            socket.clubProfile
+              .avatar,
+        });
+      }
+
+      /*
+        SEND USERS
+      */
+
+      io.emit(
+        "club_online_users",
+        clubUsers
+      );
+
+      /*
+        SEND OLD MESSAGES
+      */
+
+      socket.emit(
+        "club_old_messages",
+        clubMessages
+      );
+
+      /*
+        SYSTEM MESSAGE
+      */
+
+      io.emit(
+        "club_system",
+        {
+          text: `${socket.clubProfile.nickname} joined VIBE 🌌`,
+        }
+      );
+
+      console.log(
+        `${socket.clubProfile.nickname} joined VIBE Club`
+      );
+    }
+  );
+
+  /*
+    CLUB MESSAGE
+  */
+
+  socket.on(
+    "club_message",
+    (data) => {
+      if (!socket.clubProfile)
+        return;
+
+      const now = Date.now();
+
+      /*
+        ANTISPAM
+      */
+
+      if (
+        now - socket.lastMessageTime <
+        700
+      ) {
+        return;
+      }
+
+      socket.lastMessageTime = now;
+
+      const messageData = {
+        id: Date.now(),
+
+        nickname:
+          socket.clubProfile
+            .nickname,
+
+        bio:
+          socket.clubProfile.bio,
+
+        avatar:
+          socket.clubProfile
+            .avatar,
+
+        text: data.text,
+
+        timestamp: Date.now(),
+      };
+
+      /*
+        SAVE MESSAGE
+      */
+
+      clubMessages.push(
+        messageData
+      );
+
+      /*
+        KEEP LAST 100
+      */
+
+      if (
+        clubMessages.length > 100
+      ) {
+        clubMessages.shift();
+      }
+
+      io.emit(
+        "club_message",
+        messageData
+      );
+    }
+  );
+
+  /*
+    CLUB TYPING
+  */
+
+  socket.on(
+    "club_typing",
+    () => {
+      if (!socket.clubProfile)
+        return;
+
+      socket.broadcast.emit(
+        "club_typing",
+        {
+          nickname:
+            socket.clubProfile
+              .nickname,
+        }
+      );
+    }
+  );
+
+  /*
+    PROFILE UPDATE
+  */
+
+  socket.on(
+    "update_profile",
+    (profile) => {
+      if (!socket.clubProfile)
+        return;
+
+      socket.clubProfile.nickname =
+        profile.nickname;
+
+      socket.clubProfile.bio =
+        profile.bio;
+
+      socket.clubProfile.avatar =
+        profile.avatar;
+
+      clubUsers = clubUsers.map(
+        (user) =>
+          user.id === socket.id
+            ? {
+                ...user,
+
+                nickname:
+                  profile.nickname,
+
+                bio: profile.bio,
+
+                avatar:
+                  profile.avatar,
+              }
+            : user
+      );
+
+      io.emit(
+        "club_online_users",
+        clubUsers
+      );
+    }
+  );
+
+  /*
+    DISCONNECT
+  */
+
   socket.on("disconnect", () => {
     leaveRoom(socket);
+
+    /*
+      REMOVE WAITING
+    */
 
     waitingUsers =
       waitingUsers.filter(
         (user) =>
           user.id !== socket.id
       );
+
+    /*
+      REMOVE CLUB USER
+    */
+
+    clubUsers =
+      clubUsers.filter(
+        (user) =>
+          user.id !== socket.id
+      );
+
+    io.emit(
+      "club_online_users",
+      clubUsers
+    );
+
+    /*
+      SYSTEM MESSAGE
+    */
+
+    if (socket.clubProfile) {
+      io.emit(
+        "club_system",
+        {
+          text: `${socket.clubProfile.nickname} left VIBE`,
+        }
+      );
+    }
+
+    /*
+      ONLINE COUNT
+    */
 
     onlineUsers--;
 
@@ -138,6 +467,10 @@ io.on("connection", (socket) => {
     );
   });
 });
+
+/*
+  MATCH USERS
+*/
 
 function matchUsers() {
   while (
@@ -178,6 +511,10 @@ function matchUsers() {
   }
 }
 
+/*
+  LEAVE ROOM
+*/
+
 function leaveRoom(socket) {
   if (!socket.roomId) return;
 
@@ -187,10 +524,16 @@ function leaveRoom(socket) {
       "stranger_left"
     );
 
-  socket.leave(socket.roomId);
+  socket.leave(
+    socket.roomId
+  );
 
   socket.roomId = null;
 }
+
+/*
+  START SERVER
+*/
 
 const PORT =
   process.env.PORT || 3001;
